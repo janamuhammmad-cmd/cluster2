@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>تحديد أقرب مستشفى</title>
+
+<style>
+body {
+    font-family: sans-serif;
+    background: linear-gradient(135deg, #eef2f7, #ffffff);
+    padding:20px;
+}
+
+.card {
+    background:white;
+    padding:20px;
+    border-radius:16px;
+    max-width:520px;
+    margin:auto;
+    box-shadow:0 10px 25px rgba(0,0,0,0.1);
+}
+
+h2 { text-align:center; margin-bottom:15px; }
+
+label { font-size:14px; color:#555; }
+
+input, select {
+    width:100%;
+    padding:12px;
+    margin:6px 0 12px;
+    border-radius:10px;
+    border:1px solid #ddd;
+    font-size:14px;
+}
+
+button {
+    width:100%;
+    padding:14px;
+    background:#0d6efd;
+    color:white;
+    border:none;
+    border-radius:10px;
+    font-size:16px;
+    cursor:pointer;
+}
+
+button:hover { background:#0b5ed7; }
+
+.hospital {
+    background:#f8f9fa;
+    padding:12px;
+    margin-top:10px;
+    border-radius:10px;
+    border-right:4px solid #0d6efd;
+}
+
+.section {
+    background:#fafafa;
+    padding:10px;
+    border-radius:10px;
+    margin-bottom:10px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="card">
+    <h2>🏥 تحديد أقرب مستشفى</h2>
+
+    <div class="section">
+        <label>📍 البحث باسم الموقع</label>
+        <input id="searchPlace" type="text" placeholder="مثال: حي النرجس، الرياض">
+        <button onclick="searchLocation()">بحث عن الموقع</button>
+    </div>
+
+    <div class="section">
+        <label>أو أدخل الإحداثيات:</label>
+        <input id="lat" type="number" placeholder="Latitude">
+        <input id="lng" type="number" placeholder="Longitude">
+    </div>
+
+    <label>التصفية:</label>
+    <select id="filter">
+        <option value="all">كل المستشفيات</option>
+        <option value="cluster2">تجمع الرياض الصحي الثاني</option>
+    </select>
+
+    <button onclick="findNearest()">عرض النتائج</button>
+
+    <div id="result"></div>
+</div>
+
+<script>
+
+// نفس قائمة المستشفيات السابقة
+const hospitals = [
+    { name: "مدينة الملك فهد الطبية", city: "الرياض", lat: 24.690, lng: 46.690, cluster: "cluster2" },
+    { name: "مستشفى اليمامة", city: "الرياض", lat: 24.640, lng: 46.770, cluster: "cluster2" },
+    { name: "مستشفى الأمير محمد", city: "الرياض", lat: 24.770, lng: 46.720, cluster: "cluster2" },
+    { name: "مستشفى حوطة سدير", city: "حوطة سدير", lat: 25.650, lng: 45.860, cluster: "cluster2" },
+    { name: "مستشفى تمير", city: "تمير", lat: 25.700, lng: 45.870, cluster: "cluster2" },
+    { name: "مستشفى الغاط", city: "الغاط", lat: 26.030, lng: 44.940, cluster: "cluster2" },
+    { name: "مستشفى رماح", city: "رماح", lat: 25.680, lng: 46.150, cluster: "cluster2" },
+    { name: "مستشفى الزلفي", city: "الزلفي", lat: 26.300, lng: 44.820, cluster: "cluster2" },
+    { name: "مستشفى الأرطاوية", city: "الأرطاوية", lat: 26.500, lng: 45.350, cluster: "cluster2" },
+    { name: "مستشفى الملك خالد", city: "المجمعة", lat: 25.900, lng: 45.350, cluster: "cluster2" }
+];
+
+// البحث عن الموقع (تحويل اسم → إحداثيات)
+async function searchLocation() {
+    const place = document.getElementById("searchPlace").value;
+
+    if (!place) return alert("اكتب اسم الموقع");
+
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${place}`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.length === 0) {
+        alert("لم يتم العثور على الموقع");
+        return;
+    }
+
+    document.getElementById("lat").value = data[0].lat;
+    document.getElementById("lng").value = data[0].lon;
+
+    alert("تم تحديد الموقع ✔");
+}
+
+// حساب المسافة
+function distance(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2-lat1) * Math.PI/180;
+    const dLon = (lon2-lon1) * Math.PI/180;
+
+    const a = Math.sin(dLat/2)**2 +
+              Math.cos(lat1*Math.PI/180) *
+              Math.cos(lat2*Math.PI/180) *
+              Math.sin(dLon/2)**2;
+
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+}
+
+// الوقت
+function formatTime(distanceKm) {
+    const speed = 60;
+    const totalSeconds = (distanceKm / speed) * 3600;
+
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = Math.floor(totalSeconds % 60);
+
+    return `${h} س ${m} د ${s} ث`;
+}
+
+function findNearest() {
+    const lat = parseFloat(document.getElementById("lat").value);
+    const lng = parseFloat(document.getElementById("lng").value);
+    const filter = document.getElementById("filter").value;
+
+    let list = hospitals.filter(h => filter === "cluster2" ? h.cluster === "cluster2" : true);
+
+    list.forEach(h => h.dist = distance(lat, lng, h.lat, h.lng));
+
+    list.sort((a, b) => a.dist - b.dist);
+
+    let html = "";
+
+    list.forEach(h => {
+        html += `
+        <div class="hospital">
+            <b>${h.name}</b><br>
+            📍 ${h.city}<br>
+            📏 ${h.dist.toFixed(2)} كم<br>
+            ⏱ ${formatTime(h.dist)}
+        </div>`;
+    });
+
+    document.getElementById("result").innerHTML = html;
+}
+
+</script>
+
+</body>
+</html>
